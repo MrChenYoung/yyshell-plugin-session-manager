@@ -1,0 +1,28 @@
+{
+    "id": "session-manager",
+    "name": "会话管理器",
+    "version": "1.0.0",
+    "description": "管理服务器上的 screen/tmux 会话",
+    "author": "YYShell Team",
+    "license": "MIT",
+    "repository": "https://github.com/MrChenYoung/yyshell",
+    "engines": {
+        "yyshell": ">=0.3.0"
+    },
+    "entrypoints": {
+        "frontend": "src/index.tsx"
+    },
+    "contributes": {
+        "panels": [
+            {
+                "id": "session-panel",
+                "title": "会话管理",
+                "icon": "layers",
+                "location": "bottom"
+            }
+        ]
+    },
+    "permissions": [
+        "ssh:exec"
+    ]
+}
