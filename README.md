@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/YYShell-Official%20Plugin-blue" alt="Official Plugin">
-  <img src="https://img.shields.io/badge/version-1.1.2-green" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.2.0-green" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-yellow" alt="License">
 </p>
 
@@ -16,7 +16,7 @@ YYShell 官方插件 - 管理服务器上的 screen/tmux 会话，支持终端�
 - ✏️ **会话编辑** - 自定义会话名称和备注
 - 🔄 **批量操作** - 批量选择和删除会话
 - ⚙️ **工具管理** - 安装/卸载 screen 和 tmux
-- 🔐 **密钥认证** - 支持密码和密钥两种认证方式
+- 🔐 **安全认证** - 支持密码和密钥认证，密码通过系统密钥链安全管理
 
 ## 📦 安装
 
@@ -84,8 +84,37 @@ git clone https://github.com/MrChenYoung/yyshell-plugin-session-manager.git
 # 进入目录
 cd yyshell-plugin-session-manager
 
-# 将 src 目录复制到 YYShell 的 plugins 目录下测试
+# 安装依赖
+npm install
+
+# 构建插件
+npm run build
+
+# 打包成 zip（用于本地安装测试）
+mkdir -p /tmp/session-manager-plugin
+cp manifest.json dist/plugin.js /tmp/session-manager-plugin/
+cd /tmp && zip -r session-manager.zip session-manager-plugin
 ```
+
+## 📝 更新日志
+
+### v1.2.0 (2024-12-24)
+- 🔒 **安全改进** - 移除密码字段，密码由宿主端从系统密钥链安全获取
+- ✨ **新增 serverId** - 支持子连接使用正确的服务器凭据进行认证
+- 🧹 **代码优化** - 清理冗余代码
+
+### v1.1.2
+- 📦 优化构建配置，输出单文件 IIFE 格式
+- 🔧 GitHub Actions 自动发布
+
+### v1.1.0
+- 🖥️ 终端内嵌功能
+- 📖 命令手册
+- ✏️ 会话编辑
+
+### v1.0.0
+- 🎉 首次发布
+- 📋 基础会话管理功能
 
 ## 📄 许可证
 
