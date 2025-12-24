@@ -5,7 +5,7 @@
     "description": "管理服务器上的 screen/tmux 会话，支持终端内嵌和命令手册",
     "author": "YYShell Team",
     "license": "MIT",
-    "repository": "https://github.com/MrChenYoung/yyshell",
+    "repository": "https://github.com/MrChenYoung/yyshell-plugin-session-manager",
     "engines": {
         "yyshell": ">=0.3.0"
     },

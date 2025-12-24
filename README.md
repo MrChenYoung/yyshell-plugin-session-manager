@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/YYShell-Official%20Plugin-blue" alt="Official Plugin">
-  <img src="https://img.shields.io/badge/version-1.1.0-green" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.2-green" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-yellow" alt="License">
 </p>
 
