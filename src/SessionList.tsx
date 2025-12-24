@@ -1,7 +1,16 @@
-// Session Manager - Session List Component
+// Session Manager - Sidebar + Terminal Split Layout
+// This is a standalone plugin - all styles and logic are self-contained
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Session, SessionListResult, SessionType } from './types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Session, SessionType, YYShellPluginAPI, TermDataEvent } from './types';
+import { TerminalPanel } from './TerminalPanel';
+import { CommandManual } from './CommandManual';
+import './styles.css';
+
+// Get plugin API from window
+const getAPI = (): YYShellPluginAPI | null => {
+    return (window as any).__YYSHELL_PLUGIN__ || null;
+};
 
 // Icons (inline SVG for independence)
 const RefreshIcon = () => (
@@ -21,437 +30,1437 @@ const PlusIcon = () => (
 );
 
 const TrashIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M3 6h18" />
-        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
     </svg>
 );
 
-const LinkIcon = () => (
+const SettingsIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+        <circle cx="12" cy="12" r="3" />
+    </svg>
+);
+
+const CloseIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+);
+
+const BackIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+);
+
+const AlertIcon = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
 );
 
 interface SessionListProps {
-    connectionId: string | null;
+    connectionId: string;
+    serverName: string;
+    serverHost: string;
+    serverUser: string;      // SSH username for connection
+    serverPassword?: string; // SSH password for authentication
+    serverAuthType?: string; // Auth type: 'Password' or 'Key'
+    serverKeyPath?: string;  // Private key path for key-based auth
+    onBack: () => void;
 }
 
-export function SessionList({ connectionId }: SessionListProps) {
+export function SessionList({ connectionId, serverName, serverHost, serverUser, serverPassword, serverAuthType, serverKeyPath, onBack }: SessionListProps) {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [newSessionName, setNewSessionName] = useState('');
     const [newSessionType, setNewSessionType] = useState<SessionType>('screen');
-    const [showCreateForm, setShowCreateForm] = useState(false);
+    const [newSessionCommand, setNewSessionCommand] = useState('');
+    const [newSessionNote, setNewSessionNote] = useState('');
+    const [showCreate, setShowCreate] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [showManual, setShowManual] = useState(false);
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [availableTools, setAvailableTools] = useState({ screen: true, tmux: true });
+    const [installing, setInstalling] = useState<'screen' | 'tmux' | null>(null);
+    const [uninstalling, setUninstalling] = useState<'screen' | 'tmux' | null>(null);
+    const [initialCheckDone, setInitialCheckDone] = useState(false);
+    const [serverTimezoneOffset, setServerTimezoneOffset] = useState<number | null>(null); // Server timezone offset in minutes
 
-    // Get plugin API
-    const api = window.__YYSHELL__;
+    // New: Selected and attached sessions
+    const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+    const [attachedSessions, setAttachedSessions] = useState<Session[]>([]);
+    const [currentTerminalIndex, setCurrentTerminalIndex] = useState(0);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(false);
+    const terminalPanelsRef = useRef<HTMLDivElement>(null);
 
-    // Parse screen -ls output
+    // Terminal display count setting (1-4)
+    const [terminalDisplayCount, setTerminalDisplayCount] = useState<number>(() => {
+        const saved = localStorage.getItem('sm-terminal-display-count');
+        return saved ? Math.min(4, Math.max(1, parseInt(saved, 10))) : 2;
+    });
+
+    // Custom confirm dialog
+    const [confirmDialog, setConfirmDialog] = useState<{
+        show: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void | Promise<void>;
+    }>({ show: false, title: '', message: '', onConfirm: () => { } });
+
+    // Context menu state
+    const [contextMenu, setContextMenu] = useState<{
+        show: boolean;
+        x: number;
+        y: number;
+        session: Session | null;
+    }>({ show: false, x: 0, y: 0, session: null });
+
+    // Batch selection mode
+    const [batchMode, setBatchMode] = useState(false);
+    const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
+
+    const showConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>) => {
+        setConfirmDialog({ show: true, title, message, onConfirm });
+    };
+
+    const closeConfirm = () => {
+        setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => { } });
+    };
+
+    // Context menu handlers
+    const handleContextMenu = (e: React.MouseEvent, session: Session) => {
+        e.preventDefault();
+        const menuHeight = 150; // Estimated menu height
+        const windowHeight = window.innerHeight;
+        let y = e.clientY;
+
+        // If menu would overflow bottom, position it above the click point
+        if (y + menuHeight > windowHeight) {
+            y = Math.max(10, windowHeight - menuHeight - 10);
+        }
+
+        setContextMenu({
+            show: true,
+            x: e.clientX,
+            y: y,
+            session
+        });
+    };
+
+    const closeContextMenu = () => {
+        setContextMenu({ show: false, x: 0, y: 0, session: null });
+    };
+
+    // Session metadata storage (localStorage based)
+    const getSessionMetadataKey = () => `sm-session-metadata-${connectionId}`;
+
+    const loadSessionMetadata = (): Record<string, { note?: string; command?: string }> => {
+        try {
+            const data = localStorage.getItem(getSessionMetadataKey());
+            return data ? JSON.parse(data) : {};
+        } catch {
+            return {};
+        }
+    };
+
+    const saveSessionMetadataToStorage = (sessionId: string, data: { command?: string; note?: string }) => {
+        const all = { ...loadSessionMetadata() };
+        all[sessionId] = data;
+        localStorage.setItem(getSessionMetadataKey(), JSON.stringify(all));
+    };
+
+    const [sessionMetadata, setSessionMetadata] = useState<Record<string, { note?: string; command?: string }>>(loadSessionMetadata);
+
+    // Edit session state
+    const [editDialog, setEditDialog] = useState<{
+        show: boolean;
+        session: Session | null;
+        name: string;
+        command: string;
+        note: string;
+    }>({ show: false, session: null, name: '', command: '', note: '' });
+
+    const openEditDialog = (session: Session) => {
+        closeContextMenu();
+        const meta = sessionMetadata[session.id] || {};
+        setEditDialog({
+            show: true,
+            session,
+            name: session.name,
+            command: meta.command || '',
+            note: meta.note || ''
+        });
+    };
+
+    const closeEditDialog = () => {
+        setEditDialog({ show: false, session: null, name: '', command: '', note: '' });
+    };
+
+    // Format date/time to friendly Chinese format with timezone conversion
+    const formatDateTime = (dateStr?: string): string => {
+        if (!dateStr) return '';
+        try {
+            // Parse date from screen -ls output format: "12/23/2025 04:21:38" or similar
+            let date: Date | null = null;
+
+            // Format: MM/DD/YYYY HH:MM:SS or MM/DD/YY HH:MM:SS
+            const usFormat = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+            if (usFormat) {
+                const month = parseInt(usFormat[1]) - 1;
+                const day = parseInt(usFormat[2]);
+                let year = parseInt(usFormat[3]);
+                if (year < 100) year += 2000;
+                const hour = parseInt(usFormat[4]);
+                const minute = parseInt(usFormat[5]);
+                const second = usFormat[6] ? parseInt(usFormat[6]) : 0;
+
+                // Create date as if it were server local time
+                date = new Date(year, month, day, hour, minute, second);
+
+                // Apply timezone conversion if we know the server's offset
+                if (serverTimezoneOffset !== null) {
+                    // serverTimezoneOffset is in minutes (e.g., UTC+0 = 0, UTC-5 = -300)
+                    // Local offset is also in minutes (e.g., UTC+8 = -480 because getTimezoneOffset returns the opposite)
+                    const localOffset = -new Date().getTimezoneOffset(); // Convert to same sign convention
+                    const offsetDiff = localOffset - serverTimezoneOffset; // Difference in minutes
+                    date = new Date(date.getTime() + offsetDiff * 60 * 1000);
+                }
+            }
+
+            if (!date || isNaN(date.getTime())) {
+                return dateStr; // Return original if parsing failed
+            }
+
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+            const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+            const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+            if (dateOnly.getTime() === today.getTime()) {
+                return `今天 ${timeStr}`;
+            } else if (dateOnly.getTime() === yesterday.getTime()) {
+                return `昨天 ${timeStr}`;
+            } else {
+                const month = date.getMonth() + 1;
+                const day = date.getDate();
+                return `${month}月${day}日 ${timeStr}`;
+            }
+        } catch {
+            return dateStr;
+        }
+    };
+
+    const api = getAPI();
+
+    // Parse screen session output
+    // Supports two formats:
+    // 1. With date: "64806.T  (12/23/2025 04:21:38)  (Detached)"
+    // 2. Without date: "64806.T  (Detached)"
     const parseScreenOutput = (output: string): Session[] => {
         const sessions: Session[] = [];
         const lines = output.split('\n');
-
         for (const line of lines) {
-            // Match: 12345.session_name (Detached) or (Attached)
-            const match = line.match(/^\s*(\d+)\.(\S+)\s+\(([^)]+)\)/);
+            // Try format with date first: "12345.name (date) (status)"
+            let match = line.match(/^\s*(\d+)\.([^\s]+)\s+\(([^)]+)\)\s+\(([^)]+)\)/);
             if (match) {
                 sessions.push({
                     id: match[1],
                     name: match[2],
                     type: 'screen',
-                    status: match[3].toLowerCase().includes('attached') ? 'attached' : 'detached',
+                    status: match[4].toLowerCase().includes('attached') ? 'attached' : 'detached',
+                    created: match[3]
+                });
+                continue;
+            }
+            // Try format without date: "12345.name (status)"
+            match = line.match(/^\s*(\d+)\.([^\s]+)\s+\(([^)]+)\)/);
+            if (match) {
+                const statusText = match[3].toLowerCase();
+                sessions.push({
+                    id: match[1],
+                    name: match[2],
+                    type: 'screen',
+                    status: statusText.includes('attached') ? 'attached' : 'detached',
+                    created: undefined
                 });
             }
         }
         return sessions;
     };
 
-    // Parse tmux list-sessions output
+    // Parse tmux session output
     const parseTmuxOutput = (output: string): Session[] => {
         const sessions: Session[] = [];
         const lines = output.split('\n');
-
         for (const line of lines) {
-            // Match: session_name: windows (created date) or (attached)
-            const match = line.match(/^([^:]+):\s*\d+\s*windows?\s*(?:\([^)]*\))?\s*(\(attached\))?/);
+            const match = line.match(/^([^:]+):\s*\d+\s*windows?\s*\([^)]*\)\s*(\(attached\))?/);
             if (match) {
                 sessions.push({
                     id: match[1],
                     name: match[1],
                     type: 'tmux',
-                    status: match[2] ? 'attached' : 'detached',
+                    status: match[2] ? 'attached' : 'detached'
                 });
             }
         }
         return sessions;
     };
 
-    // Load sessions
+    // Load sessions with tool detection - OPTIMIZED: single SSH call
     const loadSessions = useCallback(async () => {
-        if (!connectionId || !api) return;
-
+        if (!api) return;
         setLoading(true);
         setError(null);
-
         try {
-            const allSessions: Session[] = [];
+            // Combine all commands into a single SSH call for performance
+            // This reduces 5 round-trips to 1, dramatically improving refresh speed
+            const combinedCmd = `
+echo "===TZ_START===" && date +%z 2>/dev/null || echo "";
+echo "===SCREEN_CHECK===" && (command -v screen >/dev/null 2>&1 && echo "OK" || echo "NO");
+echo "===SCREEN_LIST===" && (screen -ls 2>/dev/null || true);
+echo "===TMUX_CHECK===" && (command -v tmux >/dev/null 2>&1 && echo "OK" || echo "NO");
+echo "===TMUX_LIST===" && (tmux list-sessions 2>/dev/null || true);
+echo "===END==="
+`;
+            const output = await api.sshExec(connectionId, combinedCmd);
 
-            // Get screen sessions
-            try {
-                const screenOutput = await api.sshExec(connectionId, 'screen -ls 2>/dev/null || true');
-                allSessions.push(...parseScreenOutput(screenOutput));
-            } catch (e) {
-                console.log('No screen sessions or screen not installed');
+            // Parse the combined output
+            const sections = {
+                tz: '',
+                screenCheck: '',
+                screenList: '',
+                tmuxCheck: '',
+                tmuxList: ''
+            };
+
+            // Extract each section using markers
+            const tzMatch = output.match(/===TZ_START===\n?([\s\S]*?)===SCREEN_CHECK===/);
+            const screenCheckMatch = output.match(/===SCREEN_CHECK===\n?([\s\S]*?)===SCREEN_LIST===/);
+            const screenListMatch = output.match(/===SCREEN_LIST===\n?([\s\S]*?)===TMUX_CHECK===/);
+            const tmuxCheckMatch = output.match(/===TMUX_CHECK===\n?([\s\S]*?)===TMUX_LIST===/);
+            const tmuxListMatch = output.match(/===TMUX_LIST===\n?([\s\S]*?)===END===/);
+
+            if (tzMatch) sections.tz = tzMatch[1].trim();
+            if (screenCheckMatch) sections.screenCheck = screenCheckMatch[1].trim();
+            if (screenListMatch) sections.screenList = screenListMatch[1].trim();
+            if (tmuxCheckMatch) sections.tmuxCheck = tmuxCheckMatch[1].trim();
+            if (tmuxListMatch) sections.tmuxList = tmuxListMatch[1].trim();
+
+            // Parse timezone (only set once)
+            if (serverTimezoneOffset === null && sections.tz) {
+                const tzParsed = sections.tz.match(/^([+-])(\d{2})(\d{2})$/);
+                if (tzParsed) {
+                    const sign = tzParsed[1] === '+' ? 1 : -1;
+                    const hours = parseInt(tzParsed[2]);
+                    const mins = parseInt(tzParsed[3]);
+                    setServerTimezoneOffset(sign * (hours * 60 + mins));
+                }
             }
 
-            // Get tmux sessions
-            try {
-                const tmuxOutput = await api.sshExec(connectionId, 'tmux list-sessions 2>/dev/null || true');
-                allSessions.push(...parseTmuxOutput(tmuxOutput));
-            } catch (e) {
-                console.log('No tmux sessions or tmux not installed');
+            // Parse tool availability
+            const hasScreen = sections.screenCheck === 'OK';
+            const hasTmux = sections.tmuxCheck === 'OK';
+
+            // Parse sessions
+            const allSessions: Session[] = [];
+            if (hasScreen) {
+                allSessions.push(...parseScreenOutput(sections.screenList));
+            }
+            if (hasTmux) {
+                allSessions.push(...parseTmuxOutput(sections.tmuxList));
             }
 
             setSessions(allSessions);
+            setAvailableTools({ screen: hasScreen, tmux: hasTmux });
+            setInitialCheckDone(true);
+
+            // Auto-select available tool
+            if (!hasScreen && hasTmux) setNewSessionType('tmux');
+            if (hasScreen && !hasTmux) setNewSessionType('screen');
         } catch (e) {
             setError(String(e));
         }
-
         setLoading(false);
     }, [connectionId, api]);
 
-    // Load on mount and when connection changes
     useEffect(() => {
         loadSessions();
     }, [loadSessions]);
 
-    // Create new session
-    const createSession = async () => {
-        if (!connectionId || !api || !newSessionName.trim()) return;
+    // Auto-attach first 6 sessions on initial load
+    const hasAutoAttachedRef = useRef(false);
+    useEffect(() => {
+        // Only auto-attach once when initial check is done and we haven't attached yet
+        if (initialCheckDone && !hasAutoAttachedRef.current && sessions.length > 0) {
+            hasAutoAttachedRef.current = true;
+            // Attach first 6 sessions (or less if fewer available)
+            const sessionsToAttach = sessions.slice(0, 6);
+            setAttachedSessions(sessionsToAttach);
+        }
+    }, [initialCheckDone, sessions]);
 
-        setLoading(true);
+    // Close context menu on click outside
+    useEffect(() => {
+        const handler = () => closeContextMenu();
+        if (contextMenu.show) {
+            document.addEventListener('click', handler);
+            return () => document.removeEventListener('click', handler);
+        }
+    }, [contextMenu.show]);
+
+    // Install tool
+    const installTool = async (tool: 'screen' | 'tmux') => {
+        if (!api) return;
+        setInstalling(tool);
         try {
-            if (newSessionType === 'screen') {
-                await api.sshExec(connectionId, `screen -dmS ${newSessionName}`);
-            } else {
-                await api.sshExec(connectionId, `tmux new -d -s ${newSessionName}`);
+            const detectCmd = `
+                if command -v apt-get >/dev/null 2>&1; then echo "apt";
+                elif command -v yum >/dev/null 2>&1; then echo "yum";
+                elif command -v dnf >/dev/null 2>&1; then echo "dnf";
+                elif command -v pacman >/dev/null 2>&1; then echo "pacman";
+                elif command -v apk >/dev/null 2>&1; then echo "apk";
+                else echo "unknown"; fi
+            `;
+            const pm = (await api.sshExec(connectionId, detectCmd)).trim();
+            let installCmd = '';
+            switch (pm) {
+                case 'apt': installCmd = `sudo apt-get update && sudo apt-get install -y ${tool}`; break;
+                case 'yum': installCmd = `sudo yum install -y ${tool}`; break;
+                case 'dnf': installCmd = `sudo dnf install -y ${tool}`; break;
+                case 'pacman': installCmd = `sudo pacman -S --noconfirm ${tool}`; break;
+                case 'apk': installCmd = `sudo apk add ${tool}`; break;
+                default: throw new Error('无法检测包管理器');
             }
-            setNewSessionName('');
-            setShowCreateForm(false);
+            await api.sshExec(connectionId, installCmd);
             await loadSessions();
         } catch (e) {
-            setError(String(e));
+            setError(`安装失败: ${e}`);
         }
-        setLoading(false);
+        setInstalling(null);
     };
 
-    // Attach to session
-    const attachSession = async (session: Session) => {
-        if (!connectionId || !api) return;
+    // Uninstall tool
+    const uninstallTool = async (tool: 'screen' | 'tmux') => {
+        showConfirm(
+            '确认卸载',
+            `确定要卸载 ${tool} 吗？这将无法管理 ${tool} 会话。`,
+            async () => {
+                closeConfirm();
+                if (!api) return;
+                setUninstalling(tool);
+                try {
+                    const detectCmd = `
+                        if command -v apt-get >/dev/null 2>&1; then echo "apt";
+                        elif command -v yum >/dev/null 2>&1; then echo "yum";
+                        elif command -v dnf >/dev/null 2>&1; then echo "dnf";
+                        elif command -v pacman >/dev/null 2>&1; then echo "pacman";
+                        elif command -v apk >/dev/null 2>&1; then echo "apk";
+                        else echo "unknown"; fi
+                    `;
+                    const pm = (await api.sshExec(connectionId, detectCmd)).trim();
+                    let cmd = '';
+                    switch (pm) {
+                        case 'apt': cmd = `sudo apt-get remove -y ${tool}`; break;
+                        case 'yum': cmd = `sudo yum remove -y ${tool}`; break;
+                        case 'dnf': cmd = `sudo dnf remove -y ${tool}`; break;
+                        case 'pacman': cmd = `sudo pacman -R --noconfirm ${tool}`; break;
+                        case 'apk': cmd = `sudo apk del ${tool}`; break;
+                        default: throw new Error('无法检测包管理器');
+                    }
+                    await api.sshExec(connectionId, cmd);
+                    await loadSessions();
+                } catch (e) {
+                    setError(`卸载失败: ${e}`);
+                }
+                setUninstalling(null);
+            }
+        );
+    };
+
+    // Create session
+    const createSession = async () => {
+        if (!api || !newSessionName.trim()) return;
+
+        // Immediately close dialog and show loading for better UX
+        setShowCreate(false);
+        setLoading(true);
 
         try {
-            if (session.type === 'screen') {
-                // Write screen attach command to terminal
-                await api.writePty(connectionId, `screen -r ${session.id}\n`);
+            let cmd: string;
+            const sessionCmd = newSessionCommand.trim();
+            const sessionNote = newSessionNote.trim();
+
+            if (newSessionType === 'screen') {
+                cmd = sessionCmd
+                    ? `screen -dmS ${newSessionName} bash -c '${sessionCmd}; exec bash'`
+                    : `screen -dmS ${newSessionName}`;
             } else {
-                await api.writePty(connectionId, `tmux attach -t ${session.name}\n`);
+                cmd = sessionCmd
+                    ? `tmux new -d -s ${newSessionName} "${sessionCmd}"`
+                    : `tmux new -d -s ${newSessionName}`;
             }
+
+            await api.sshExec(connectionId, cmd);
+
+            // Save metadata if provided
+            if (sessionCmd || sessionNote) {
+                await loadSessions();
+                const output = newSessionType === 'screen'
+                    ? await api.sshExec(connectionId, 'screen -ls 2>/dev/null || true')
+                    : await api.sshExec(connectionId, 'tmux list-sessions 2>/dev/null || true');
+
+                let newSessionId: string | null = null;
+                if (newSessionType === 'screen') {
+                    const lines = output.split('\n');
+                    for (const line of lines) {
+                        const match = line.match(/^\s*(\d+)\.([^\s]+)/);
+                        if (match && match[2] === newSessionName) {
+                            newSessionId = match[1];
+                            break;
+                        }
+                    }
+                } else {
+                    newSessionId = newSessionName;
+                }
+
+                if (newSessionId) {
+                    saveSessionMetadataToStorage(newSessionId, { command: sessionCmd, note: sessionNote });
+                    setSessionMetadata(prev => ({
+                        ...prev,
+                        [newSessionId!]: { command: sessionCmd, note: sessionNote }
+                    }));
+                }
+            } else {
+                await loadSessions();
+            }
+
+            setNewSessionName('');
+            setNewSessionCommand('');
+            setNewSessionNote('');
         } catch (e) {
             setError(String(e));
+            setLoading(false);
         }
     };
 
     // Kill session
     const killSession = async (session: Session) => {
-        if (!connectionId || !api) return;
+        showConfirm(
+            '删除会话',
+            `确定要删除会话 "${session.name}" 吗？`,
+            async () => {
+                // Immediately give user feedback
+                closeConfirm();
+                setLoading(true);
+                // Remove from attached immediately for instant feedback
+                setAttachedSessions(prev => prev.filter(s => s.id !== session.id));
 
-        if (!confirm(`确定要终止会话 "${session.name}" 吗？`)) return;
+                if (!api) {
+                    setLoading(false);
+                    return;
+                }
 
-        setLoading(true);
-        try {
-            if (session.type === 'screen') {
-                await api.sshExec(connectionId, `screen -X -S ${session.id} quit`);
-            } else {
-                await api.sshExec(connectionId, `tmux kill-session -t ${session.name}`);
+                try {
+                    const cmd = session.type === 'screen'
+                        ? `screen -X -S ${session.id} quit`
+                        : `tmux kill-session -t ${session.name}`;
+                    await api.sshExec(connectionId, cmd);
+                    await loadSessions();
+                } catch (e) {
+                    setError(String(e));
+                    setLoading(false);
+                }
             }
-            await loadSessions();
+        );
+    };
+
+    // Toggle session selection for batch mode
+    const toggleBatchSelect = (sessionId: string) => {
+        setSelectedForBatch(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(sessionId)) {
+                newSet.delete(sessionId);
+            } else {
+                newSet.add(sessionId);
+            }
+            return newSet;
+        });
+    };
+
+    // Select all sessions for batch delete
+    const selectAllForBatch = () => {
+        if (selectedForBatch.size === sessions.length) {
+            setSelectedForBatch(new Set());
+        } else {
+            setSelectedForBatch(new Set(sessions.map(s => s.id)));
+        }
+    };
+
+    // Batch delete sessions
+    const batchDeleteSessions = async () => {
+        if (selectedForBatch.size === 0) return;
+
+        const count = selectedForBatch.size;
+        // Capture sessions to delete BEFORE showing confirm dialog
+        const sessionsToDelete = sessions.filter(s => selectedForBatch.has(s.id));
+
+        showConfirm(
+            '批量删除会话',
+            `确定要删除选中的 ${count} 个会话吗？此操作不可撤销。`,
+            async () => {
+                // Immediately give user feedback
+                closeConfirm();
+                setBatchMode(false);
+                setSelectedForBatch(new Set());
+                setLoading(true); // Show loading in sidebar immediately
+
+                if (!api) {
+                    setLoading(false);
+                    return;
+                }
+
+                try {
+                    // Delete each session
+                    for (const session of sessionsToDelete) {
+                        // Remove from attached immediately for instant feedback
+                        setAttachedSessions(prev => prev.filter(s => s.id !== session.id));
+
+                        const cmd = session.type === 'screen'
+                            ? `screen -X -S ${session.id} quit`
+                            : `tmux kill-session -t ${session.name}`;
+                        await api.sshExec(connectionId, cmd);
+                    }
+
+                    // Refresh sessions list
+                    await loadSessions();
+                } catch (e) {
+                    setError(String(e));
+                    setLoading(false);
+                }
+            }
+        );
+    };
+
+    // Exit batch mode
+    const exitBatchMode = () => {
+        setBatchMode(false);
+        setSelectedForBatch(new Set());
+    };
+
+    // Duplicate session - creates a copy with similar name
+    const duplicateSession = async (session: Session) => {
+        if (!api) return;
+
+        closeContextMenu();
+        setLoading(true);
+
+        try {
+            // Generate a unique name for the duplicate
+            const baseName = session.name.replace(/_copy\d*$/, ''); // Remove existing _copy suffix
+            let copyNum = 1;
+            let newName = `${baseName}_copy`;
+
+            // Check for existing copies and find next available number
+            const existingNames = sessions.map(s => s.name);
+            while (existingNames.includes(newName)) {
+                copyNum++;
+                newName = `${baseName}_copy${copyNum}`;
+            }
+
+            // Get the original session's metadata
+            const metadata = sessionMetadata[session.id];
+            const sessionCmd = metadata?.command || '';
+
+            // Create the duplicate session
+            let cmd: string;
+            if (session.type === 'screen') {
+                cmd = sessionCmd
+                    ? `screen -dmS ${newName} bash -c '${sessionCmd}; exec bash'`
+                    : `screen -dmS ${newName}`;
+            } else {
+                cmd = sessionCmd
+                    ? `tmux new -d -s ${newName} "${sessionCmd}"`
+                    : `tmux new -d -s ${newName}`;
+            }
+
+            await api.sshExec(connectionId, cmd);
+
+            // For tmux, we know the ID immediately
+            // For screen, we need to get the ID but can show dialog first
+            let newSessionId: string;
+
+            if (session.type === 'screen') {
+                // Get screen session ID quickly
+                const output = await api.sshExec(connectionId, 'screen -ls 2>/dev/null || true');
+                const lines = output.split('\n');
+                newSessionId = newName; // default fallback
+                for (const line of lines) {
+                    const match = line.match(/^\s*(\d+)\.([^\s]+)/);
+                    if (match && match[2] === newName) {
+                        newSessionId = match[1];
+                        break;
+                    }
+                }
+            } else {
+                // For tmux, the name is the ID
+                newSessionId = newName;
+            }
+
+            // Create session object for edit dialog immediately
+            const newSession: Session = {
+                id: newSessionId,
+                name: newName,
+                type: session.type,
+                status: 'detached',
+                created: new Date().toLocaleString()
+            };
+
+            // Copy metadata if exists
+            if (metadata) {
+                saveSessionMetadataToStorage(newSessionId, { command: metadata.command, note: metadata.note });
+                setSessionMetadata(prev => ({
+                    ...prev,
+                    [newSessionId]: { command: metadata.command, note: metadata.note }
+                }));
+            }
+
+            // Refresh sessions list
+            setLoading(false);
+            loadSessions();
         } catch (e) {
             setError(String(e));
+            setLoading(false);
         }
-        setLoading(false);
     };
 
-    // Styles
-    const styles = {
-        container: {
-            padding: '12px',
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column' as const,
-            fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
-            fontSize: '13px',
-        },
-        header: {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '12px',
-        },
-        title: {
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-        },
-        button: {
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            padding: '6px 12px',
-            borderRadius: '6px',
-            border: '1px solid rgba(255,255,255,0.1)',
-            background: 'rgba(255,255,255,0.05)',
-            color: 'inherit',
-            cursor: 'pointer',
-            fontSize: '12px',
-        },
-        buttonPrimary: {
-            background: 'hsl(var(--primary))',
-            color: 'hsl(var(--primary-foreground))',
-            border: 'none',
-        },
-        buttonDanger: {
-            color: '#ff6b6b',
-        },
-        iconButton: {
-            padding: '6px',
-            borderRadius: '6px',
-            border: 'none',
-            background: 'transparent',
-            color: 'inherit',
-            cursor: 'pointer',
-        },
-        sessionList: {
-            flex: 1,
-            overflow: 'auto',
-        },
-        sessionItem: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '10px 12px',
-            borderRadius: '8px',
-            background: 'rgba(255,255,255,0.03)',
-            marginBottom: '6px',
-        },
-        badge: {
-            padding: '2px 8px',
-            borderRadius: '4px',
-            fontSize: '10px',
-            fontWeight: 500,
-        },
-        badgeScreen: {
-            background: 'rgba(59, 130, 246, 0.2)',
-            color: '#3b82f6',
-        },
-        badgeTmux: {
-            background: 'rgba(16, 185, 129, 0.2)',
-            color: '#10b981',
-        },
-        statusDot: {
-            width: '6px',
-            height: '6px',
-            borderRadius: '50%',
-        },
-        statusAttached: {
-            background: '#10b981',
-        },
-        statusDetached: {
-            background: '#6b7280',
-        },
-        input: {
-            padding: '8px 12px',
-            borderRadius: '6px',
-            border: '1px solid rgba(255,255,255,0.1)',
-            background: 'rgba(0,0,0,0.2)',
-            color: 'inherit',
-            fontSize: '13px',
-            outline: 'none',
-        },
-        select: {
-            padding: '8px 12px',
-            borderRadius: '6px',
-            border: '1px solid rgba(255,255,255,0.1)',
-            background: 'rgba(0,0,0,0.2)',
-            color: 'inherit',
-            fontSize: '13px',
-        },
-        createForm: {
-            display: 'flex',
-            gap: '8px',
-            marginBottom: '12px',
-            padding: '12px',
-            borderRadius: '8px',
-            background: 'rgba(255,255,255,0.03)',
-        },
-        empty: {
-            textAlign: 'center' as const,
-            padding: '40px',
-            color: 'rgba(255,255,255,0.4)',
-        },
-        error: {
-            padding: '10px',
-            borderRadius: '6px',
-            background: 'rgba(255,0,0,0.1)',
-            color: '#ff6b6b',
-            marginBottom: '12px',
-        },
+    const attachSession = async (session: Session) => {
+        // Check if already attached
+        if (attachedSessions.some(s => s.id === session.id)) {
+            return; // Already attached
+        }
+
+        try {
+            // Send attach command to terminal
+            // Use -d -r for screen (detach and reattach) to force take over
+            // Use -d for tmux to detach other clients before attaching
+            if (api) {
+                const attachCmd = session.type === 'screen'
+                    ? `screen -d -r ${session.id}`  // Force detach other connections
+                    : `tmux attach -d -t ${session.name}`;  // Detach other clients
+                await api.writePty(connectionId, attachCmd + '\n');
+            }
+
+            // Add to attached sessions
+            setAttachedSessions(prev => [...prev, session]);
+
+            // Auto scroll to show the newly opened terminal
+            setTimeout(() => {
+                const container = terminalPanelsRef.current;
+                if (container) {
+                    container.scrollTo({
+                        left: container.scrollWidth,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 100);
+        } catch (e) {
+            setError(`附加失败: ${e}`);
+        }
     };
 
-    if (!connectionId) {
-        return (
-            <div style={styles.container}>
-                <div style={styles.empty}>
-                    <p>请先连接到服务器</p>
-                </div>
-            </div>
-        );
-    }
+    // Detach session
+    const detachSession = async (session: Session) => {
+        closeContextMenu();
+        setAttachedSessions(prev => prev.filter(s => s.id !== session.id));
+
+        // Send detach command if still in terminal
+        if (api) {
+            const detachKey = session.type === 'screen' ? '\x01d' : '\x02d';
+            try {
+                await api.writePty(connectionId, detachKey);
+            } catch { }
+        }
+    };
+
+    // Force detach remote attached sessions
+    const forceDetachRemote = async (session: Session) => {
+        closeContextMenu();
+        if (!api) return;
+
+        try {
+            // Send command to force detach all other clients
+            if (session.type === 'screen') {
+                // screen -d <session_id> detaches all attached clients
+                await api.writePty(connectionId, `screen -d ${session.id}\n`);
+            } else {
+                // tmux detach-client -t <session_name> -a detaches all other clients
+                await api.writePty(connectionId, `tmux detach-client -t ${session.name} -a\n`);
+            }
+            // Refresh session list after a short delay
+            setTimeout(loadSessions, 500);
+        } catch (e) {
+            setError(`强制分离失败: ${e}`);
+        }
+    };
+
+    // Handle session click
+    const handleSessionClick = (session: Session) => {
+        setSelectedSessionId(session.id);
+    };
+
+    // Handle session double-click
+    const handleSessionDoubleClick = (session: Session) => {
+        attachSession(session);
+    };
+
+    // Save edit
+    const saveSessionEdit = async () => {
+        if (!api || !editDialog.session) return;
+        const session = editDialog.session;
+        const newName = editDialog.name.trim();
+        const newMeta = {
+            command: editDialog.command.trim(),
+            note: editDialog.note.trim()
+        };
+
+        // Immediately close dialog and update UI
+        closeEditDialog();
+
+        // Immediately update sessions list with new name for instant feedback
+        if (newName && newName !== session.name) {
+            setSessions(prev => prev.map(s =>
+                s.id === session.id ? { ...s, name: newName } : s
+            ));
+        }
+
+        // Immediately update metadata
+        saveSessionMetadataToStorage(session.id, newMeta);
+        setSessionMetadata(prev => ({ ...prev, [session.id]: newMeta }));
+
+        try {
+            // Rename if name changed
+            if (newName && newName !== session.name) {
+                const renameCmd = session.type === 'screen'
+                    ? `screen -S ${session.id} -X sessionname ${newName}`
+                    : `tmux rename-session -t ${session.name} ${newName}`;
+                await api.sshExec(connectionId, renameCmd);
+            }
+            // No need to refresh - local state already updated
+        } catch (e) {
+            setError(`编辑失败: ${e}`);
+            // Reload to restore correct state on error
+            loadSessions();
+        }
+    };
+
+    // Sync currentTerminalIndex and scroll capability with scroll position
+    useEffect(() => {
+        const container = terminalPanelsRef.current;
+        if (!container) return;
+
+        const updateScrollState = () => {
+            const scrollLeft = container.scrollLeft;
+            const scrollWidth = container.scrollWidth;
+            const clientWidth = container.clientWidth;
+
+            // Check if we can scroll left/right
+            setCanScrollLeft(scrollLeft > 1);
+            setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 1);
+
+            // Calculate current terminal index based on terminalDisplayCount
+            // Gap is 16px between terminals
+            const gap = 16;
+            const terminalWidth = (clientWidth + gap) / terminalDisplayCount - gap / terminalDisplayCount;
+            const currentIndex = Math.round(scrollLeft / (terminalWidth + gap / terminalDisplayCount));
+            const clampedIndex = Math.max(0, Math.min(currentIndex, attachedSessions.length - 1));
+
+            if (clampedIndex !== currentTerminalIndex) {
+                setCurrentTerminalIndex(clampedIndex);
+            }
+        };
+
+        // Initial check
+        updateScrollState();
+
+        container.addEventListener('scroll', updateScrollState);
+        const resizeObserver = new ResizeObserver(updateScrollState);
+        resizeObserver.observe(container);
+
+        return () => {
+            container.removeEventListener('scroll', updateScrollState);
+            resizeObserver.disconnect();
+        };
+    }, [attachedSessions.length, currentTerminalIndex, terminalDisplayCount]);
+
+    const screenCount = sessions.filter(s => s.type === 'screen').length;
+    const tmuxCount = sessions.filter(s => s.type === 'tmux').length;
+
+    // ============ RENDER ============
 
     return (
-        <div style={styles.container}>
+        <div className="sm-container">
             {/* Header */}
-            <div style={styles.header}>
-                <div style={styles.title}>
-                    <span>🖥️ 后台会话</span>
-                    <span style={{ opacity: 0.5, fontWeight: 400 }}>
-                        ({sessions.length})
-                    </span>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                        style={styles.iconButton}
-                        onClick={loadSessions}
-                        disabled={loading}
-                        title="刷新"
-                    >
-                        <RefreshIcon />
+            <div className="sm-header">
+                <div className="sm-header-left">
+                    <button className="sm-back-btn" onClick={onBack}>
+                        <BackIcon />
                     </button>
-                    <button
-                        style={{ ...styles.button, ...styles.buttonPrimary }}
-                        onClick={() => setShowCreateForm(!showCreateForm)}
-                    >
+                    <div className="sm-server-info">
+                        <h2>{serverName}</h2>
+                        <span>{serverHost}</span>
+                    </div>
+                </div>
+                <div className="sm-header-right">
+                    <button className="sm-help-btn" onClick={() => setShowManual(true)} title="命令手册">
+                        ?
+                    </button>
+                    <button className="sm-icon-btn" onClick={() => setShowSettings(true)} title="设置">
+                        <SettingsIcon />
+                    </button>
+                    <button className="sm-btn sm-btn-primary" onClick={() => setShowCreate(true)}>
                         <PlusIcon />
-                        新建
+                        <span>新建会话</span>
                     </button>
                 </div>
             </div>
 
-            {/* Error */}
+            {/* Error display */}
             {error && (
-                <div style={styles.error}>
-                    {error}
+                <div className="sm-error">
+                    <AlertIcon />
+                    <span>{error}</span>
+                    <button onClick={() => setError(null)}>✕</button>
                 </div>
             )}
 
-            {/* Create Form */}
-            {showCreateForm && (
-                <div style={styles.createForm}>
-                    <input
-                        style={{ ...styles.input, flex: 1 }}
-                        placeholder="会话名称"
-                        value={newSessionName}
-                        onChange={(e) => setNewSessionName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && createSession()}
-                    />
-                    <select
-                        style={styles.select}
-                        value={newSessionType}
-                        onChange={(e) => setNewSessionType(e.target.value as SessionType)}
-                    >
-                        <option value="screen">Screen</option>
-                        <option value="tmux">Tmux</option>
-                    </select>
-                    <button
-                        style={{ ...styles.button, ...styles.buttonPrimary }}
-                        onClick={createSession}
-                        disabled={loading || !newSessionName.trim()}
-                    >
-                        创建
-                    </button>
-                </div>
-            )}
-
-            {/* Session List */}
-            <div style={styles.sessionList}>
-                {loading && sessions.length === 0 ? (
-                    <div style={styles.empty}>加载中...</div>
-                ) : sessions.length === 0 ? (
-                    <div style={styles.empty}>
-                        <p>暂无后台会话</p>
-                        <p style={{ fontSize: '12px', marginTop: '8px' }}>
-                            点击"新建"创建 screen 或 tmux 会话
-                        </p>
+            {/* Main layout: Sidebar + Terminal Area */}
+            <div className="sm-main-layout">
+                {/* Left Sidebar */}
+                <div className="sm-sidebar">
+                    <div className="sm-sidebar-header">
+                        <span className="sm-sidebar-title">会话列表</span>
+                        <button className="sm-refresh-btn" onClick={loadSessions} disabled={loading} title="刷新">
+                            <RefreshIcon />
+                        </button>
+                        <span className="sm-session-count">{sessions.length}</span>
                     </div>
-                ) : (
-                    sessions.map((session) => (
-                        <div key={`${session.type}-${session.id}`} style={styles.sessionItem}>
-                            {/* Status dot */}
-                            <div
-                                style={{
-                                    ...styles.statusDot,
-                                    ...(session.status === 'attached'
-                                        ? styles.statusAttached
-                                        : styles.statusDetached),
-                                }}
-                                title={session.status === 'attached' ? '已附加' : '已分离'}
-                            />
 
-                            {/* Type badge */}
-                            <span
-                                style={{
-                                    ...styles.badge,
-                                    ...(session.type === 'screen'
-                                        ? styles.badgeScreen
-                                        : styles.badgeTmux),
-                                }}
-                            >
-                                {session.type}
-                            </span>
-
-                            {/* Name */}
-                            <span style={{ flex: 1 }}>{session.name}</span>
-
-                            {/* ID for screen */}
-                            {session.type === 'screen' && (
-                                <span style={{ opacity: 0.5, fontSize: '11px' }}>
-                                    #{session.id}
-                                </span>
+                    {/* Batch selection toolbar */}
+                    {sessions.length > 0 && (
+                        <div className="sm-batch-toolbar">
+                            {batchMode ? (
+                                <>
+                                    <button
+                                        className="sm-batch-btn"
+                                        onClick={selectAllForBatch}
+                                        title={selectedForBatch.size === sessions.length ? "取消全选" : "全选"}
+                                    >
+                                        {selectedForBatch.size === sessions.length ? '☑ 取消全选' : '☐ 全选'}
+                                    </button>
+                                    <button
+                                        className="sm-batch-btn sm-batch-delete"
+                                        onClick={batchDeleteSessions}
+                                        disabled={selectedForBatch.size === 0 || actionLoading === 'batch'}
+                                    >
+                                        🗑️ 删除 ({selectedForBatch.size})
+                                    </button>
+                                    <button
+                                        className="sm-batch-btn sm-batch-cancel"
+                                        onClick={exitBatchMode}
+                                    >
+                                        ✕ 取消
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    className="sm-batch-btn"
+                                    onClick={() => setBatchMode(true)}
+                                >
+                                    ☐ 批量选择
+                                </button>
                             )}
+                        </div>
+                    )}
 
-                            {/* Actions */}
-                            <button
-                                style={styles.iconButton}
-                                onClick={() => attachSession(session)}
-                                title="附加"
+                    {loading ? (
+                        <div className="sm-sidebar-loading">
+                            <div className="sm-loading-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <span className="sm-loading-text">正在加载会话</span>
+                        </div>
+                    ) : sessions.length === 0 ? (
+                        <div className="sm-sidebar-empty">
+                            <p>暂无会话</p>
+                            <p className="sm-hint">点击右上角 + 创建新会话</p>
+                        </div>
+                    ) : (
+                        <div className="sm-session-list">
+                            {sessions.map(session => (
+                                <div
+                                    key={`${session.type}-${session.id}`}
+                                    className={`sm-session-item ${selectedSessionId === session.id ? 'selected' : ''} ${attachedSessions.some(s => s.id === session.id) ? 'attached' : ''} ${batchMode && selectedForBatch.has(session.id) ? 'batch-selected' : ''}`}
+                                    onClick={() => batchMode ? toggleBatchSelect(session.id) : handleSessionClick(session)}
+                                    onDoubleClick={() => !batchMode && handleSessionDoubleClick(session)}
+                                    onContextMenu={(e) => !batchMode && handleContextMenu(e, session)}
+                                >
+                                    {batchMode && (
+                                        <div className="sm-batch-checkbox">
+                                            {selectedForBatch.has(session.id) ? '☑' : '☐'}
+                                        </div>
+                                    )}
+                                    <div className="sm-session-info">
+                                        <div className="sm-session-header">
+                                            <span className="sm-session-name">{session.name}</span>
+                                            {attachedSessions.some(s => s.id === session.id) && (
+                                                <span className="sm-attached-badge">📺</span>
+                                            )}
+                                        </div>
+                                        <div className="sm-session-meta">
+                                            <span className={`sm-status-badge ${attachedSessions.some(s => s.id === session.id) ? 'attached' : (session.status === 'attached' ? 'remote-attached' : 'detached')}`}>
+                                                {attachedSessions.some(s => s.id === session.id) ? '本地已附加' : (session.status === 'attached' ? '远程已附加' : '空闲')}
+                                            </span>
+                                            <span className="sm-session-type">{session.type.toUpperCase()}</span>
+                                            {session.id && (
+                                                <span className="sm-session-pid">PID: {session.id.split('.')[0]}</span>
+                                            )}
+                                        </div>
+                                        <div className="sm-session-details">
+                                            {session.created && (
+                                                <span className="sm-session-time">{formatDateTime(session.created)}</span>
+                                            )}
+                                            {session.tty && (
+                                                <span className="sm-session-tty">{session.tty}</span>
+                                            )}
+                                        </div>
+                                        {sessionMetadata[session.id]?.command && (
+                                            <div className="sm-session-command-row" onClick={(e) => e.stopPropagation()}>
+                                                <code className="sm-session-command-code">{sessionMetadata[session.id].command}</code>
+                                                <button
+                                                    className="sm-copy-cmd-btn"
+                                                    title="复制命令"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const btn = e.currentTarget;
+                                                        navigator.clipboard.writeText(sessionMetadata[session.id].command || '').then(() => {
+                                                            btn.classList.add('copied');
+                                                            setTimeout(() => btn.classList.remove('copied'), 1500);
+                                                        });
+                                                    }}
+                                                >
+                                                    <svg className="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                    </svg>
+                                                    <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        )}
+                                        {sessionMetadata[session.id]?.note && (
+                                            <span className="sm-session-note">{sessionMetadata[session.id].note}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Stats footer */}
+                    <div className="sm-sidebar-footer">
+                        {availableTools.screen && <span>Screen: {screenCount}</span>}
+                        {availableTools.tmux && <span>Tmux: {tmuxCount}</span>}
+                    </div>
+                </div>
+
+                {/* Right Terminal Area */}
+                <div className="sm-terminal-area">
+                    {attachedSessions.length === 0 ? (
+                        <div className="sm-terminal-empty">
+                            <div className="sm-terminal-empty-icon">📺</div>
+                            <h3>无附加的会话</h3>
+                            <p>双击左侧列表中的会话以附加</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div
+                                className="sm-terminal-panels"
+                                ref={terminalPanelsRef}
+                                style={{
+                                    '--terminal-count': terminalDisplayCount,
+                                    '--terminal-width': `calc(${100 / terminalDisplayCount}% - ${16 * (terminalDisplayCount - 1) / terminalDisplayCount}px)`
+                                } as React.CSSProperties}
                             >
-                                <LinkIcon />
+                                {attachedSessions.map((session, index) => (
+                                    <TerminalPanel
+                                        key={session.id}
+                                        session={session}
+                                        baseConnectionId={connectionId}
+                                        serverHost={serverHost}
+                                        serverUser={serverUser}
+                                        serverPassword={serverPassword}
+                                        serverAuthType={serverAuthType}
+                                        serverKeyPath={serverKeyPath}
+                                        api={api!}
+                                        onDetach={() => detachSession(session)}
+                                        onClose={() => {
+                                            setAttachedSessions(prev => prev.filter(s => s.id !== session.id));
+                                            // Adjust current index if needed
+                                            if (index <= currentTerminalIndex && currentTerminalIndex > 0) {
+                                                setCurrentTerminalIndex(prev => prev - 1);
+                                            }
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                            {/* Terminal Navigation - at bottom */}
+                            {attachedSessions.length > terminalDisplayCount && (
+                                <div className="sm-terminal-nav">
+                                    <button
+                                        className="sm-terminal-nav-btn"
+                                        onClick={() => {
+                                            const container = terminalPanelsRef.current;
+                                            if (container) {
+                                                // Scroll left by one terminal width
+                                                const gap = 16;
+                                                const terminalWidth = (container.clientWidth + gap) / terminalDisplayCount;
+                                                container.scrollBy({ left: -terminalWidth, behavior: 'smooth' });
+                                            }
+                                        }}
+                                        disabled={!canScrollLeft}
+                                        title="上一个终端"
+                                    >
+                                        ‹
+                                    </button>
+                                    <span className="sm-terminal-nav-info">
+                                        {currentTerminalIndex + 1} / {attachedSessions.length}
+                                    </span>
+                                    <button
+                                        className="sm-terminal-nav-btn"
+                                        onClick={() => {
+                                            const container = terminalPanelsRef.current;
+                                            if (container) {
+                                                // Scroll right by one terminal width
+                                                const gap = 16;
+                                                const terminalWidth = (container.clientWidth + gap) / terminalDisplayCount;
+                                                container.scrollBy({ left: terminalWidth, behavior: 'smooth' });
+                                            }
+                                        }}
+                                        disabled={!canScrollRight}
+                                        title="下一个终端"
+                                    >
+                                        ›
+                                    </button>
+                                    <button
+                                        className="sm-terminal-close-all-btn"
+                                        onClick={() => showConfirm(
+                                            '关闭全部终端',
+                                            `确定要关闭全部 ${attachedSessions.length} 个终端吗？`,
+                                            () => setAttachedSessions([])
+                                        )}
+                                        title="关闭全部终端"
+                                    >
+                                        关闭全部
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Context Menu */}
+            {contextMenu.show && contextMenu.session && (
+                <div className="sm-context-overlay" onClick={closeContextMenu}>
+                    <div
+                        className="sm-context-menu"
+                        style={{ left: contextMenu.x, top: contextMenu.y }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button onClick={() => { attachSession(contextMenu.session!); closeContextMenu(); }}>
+                            📺 附加会话
+                        </button>
+                        {attachedSessions.some(s => s.id === contextMenu.session?.id) && (
+                            <button onClick={() => detachSession(contextMenu.session!)}>
+                                ◇ 分离会话
                             </button>
-                            <button
-                                style={{ ...styles.iconButton, ...styles.buttonDanger }}
-                                onClick={() => killSession(session)}
-                                title="终止"
-                            >
-                                <TrashIcon />
+                        )}
+                        {contextMenu.session?.status === 'attached' && !attachedSessions.some(s => s.id === contextMenu.session?.id) && (
+                            <button onClick={() => forceDetachRemote(contextMenu.session!)}>
+                                ⚡ 强制分离远程
+                            </button>
+                        )}
+                        <button onClick={() => openEditDialog(contextMenu.session!)}>
+                            ✏️ 编辑会话
+                        </button>
+                        <button onClick={() => duplicateSession(contextMenu.session!)}>
+                            📋 复制会话
+                        </button>
+                        <div className="sm-context-divider" />
+                        <button className="sm-danger" onClick={() => { killSession(contextMenu.session!); closeContextMenu(); }}>
+                            🗑️ 删除会话
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Create Session Dialog */}
+            {showCreate && (
+                <div className="sm-dialog-overlay" onClick={() => setShowCreate(false)}>
+                    <div className="sm-dialog" onClick={(e) => e.stopPropagation()}>
+                        <div className="sm-dialog-header">
+                            <h3>新建会话</h3>
+                            <button className="sm-dialog-close" onClick={() => setShowCreate(false)}>
+                                <CloseIcon />
                             </button>
                         </div>
-                    ))
-                )}
-            </div>
+                        <div className="sm-dialog-content">
+                            <div className="sm-form-group">
+                                <label>会话名称 <span className="sm-required">*</span></label>
+                                <input
+                                    type="text"
+                                    value={newSessionName}
+                                    onChange={(e) => setNewSessionName(e.target.value)}
+                                    placeholder="输入会话名称"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="sm-form-group">
+                                <label>启动命令 <span className="sm-optional">可选</span></label>
+                                <input
+                                    type="text"
+                                    value={newSessionCommand}
+                                    onChange={(e) => setNewSessionCommand(e.target.value)}
+                                    placeholder="例如: htop, python server.py"
+                                />
+                            </div>
+                            <div className="sm-form-group">
+                                <label>备注 <span className="sm-optional">可选</span></label>
+                                <input
+                                    type="text"
+                                    value={newSessionNote}
+                                    onChange={(e) => setNewSessionNote(e.target.value)}
+                                    placeholder="例如: 生产环境监控"
+                                />
+                            </div>
+                            <div className="sm-form-group">
+                                <label>会话类型</label>
+                                <div className="sm-type-selector">
+                                    <button
+                                        className={`sm-type-card ${newSessionType === 'screen' ? 'active' : ''} ${!availableTools.screen ? 'disabled' : ''}`}
+                                        onClick={() => availableTools.screen && setNewSessionType('screen')}
+                                        disabled={!availableTools.screen}
+                                    >
+                                        <span className="sm-type-icon screen">S</span>
+                                        <span>Screen</span>
+                                        {!availableTools.screen && <span className="sm-not-installed">未安装</span>}
+                                    </button>
+                                    <button
+                                        className={`sm-type-card ${newSessionType === 'tmux' ? 'active' : ''} ${!availableTools.tmux ? 'disabled' : ''}`}
+                                        onClick={() => availableTools.tmux && setNewSessionType('tmux')}
+                                        disabled={!availableTools.tmux}
+                                    >
+                                        <span className="sm-type-icon tmux">T</span>
+                                        <span>Tmux</span>
+                                        {!availableTools.tmux && <span className="sm-not-installed">未安装</span>}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="sm-form-actions">
+                                <button className="sm-btn" onClick={() => setShowCreate(false)}>取消</button>
+                                <button
+                                    className="sm-btn sm-btn-primary"
+                                    onClick={createSession}
+                                    disabled={!newSessionName.trim() || actionLoading === 'create' || (!availableTools.screen && !availableTools.tmux)}
+                                >
+                                    {actionLoading === 'create' ? '创建中...' : '创建'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Command Manual */}
+            {showManual && (
+                <CommandManual onClose={() => setShowManual(false)} />
+            )}
+
+            {/* Settings Dialog */}
+            {showSettings && (
+                <div className="sm-dialog-overlay" onClick={() => setShowSettings(false)}>
+                    <div className="sm-dialog sm-dialog-settings" onClick={(e) => e.stopPropagation()}>
+                        <div className="sm-dialog-header">
+                            <h3>设置</h3>
+                            <button className="sm-dialog-close" onClick={() => setShowSettings(false)}>
+                                <CloseIcon />
+                            </button>
+                        </div>
+                        <div className="sm-dialog-content">
+                            {/* Terminal Display Count Setting */}
+                            <div className="sm-settings-section">
+                                <h4 className="sm-settings-title">显示设置</h4>
+                                <div className="sm-setting-item">
+                                    <label className="sm-setting-label">终端显示个数</label>
+                                    <div className="sm-setting-btn-group">
+                                        {[1, 2, 3, 4].map((num) => (
+                                            <button
+                                                key={num}
+                                                className={`sm-setting-btn ${terminalDisplayCount === num ? 'active' : ''}`}
+                                                onClick={() => {
+                                                    setTerminalDisplayCount(num);
+                                                    localStorage.setItem('sm-terminal-display-count', num.toString());
+                                                }}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tool Management */}
+                            <div className="sm-settings-section">
+                                <h4 className="sm-settings-title">工具管理</h4>
+                                <div className="sm-tool-item">
+                                    <div className="sm-tool-info">
+                                        <span className="sm-tool-name">Screen</span>
+                                        <span className={`sm-tool-status ${availableTools.screen ? 'installed' : ''}`}>
+                                            {availableTools.screen ? '已安装' : '未安装'}
+                                        </span>
+                                    </div>
+                                    {availableTools.screen ? (
+                                        <button
+                                            className="sm-btn sm-btn-danger"
+                                            onClick={() => uninstallTool('screen')}
+                                            disabled={uninstalling === 'screen'}
+                                        >
+                                            {uninstalling === 'screen' ? '卸载中...' : '卸载'}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            className="sm-btn sm-btn-primary"
+                                            onClick={() => installTool('screen')}
+                                            disabled={installing === 'screen'}
+                                        >
+                                            {installing === 'screen' ? '安装中...' : '安装'}
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="sm-tool-item">
+                                    <div className="sm-tool-info">
+                                        <span className="sm-tool-name">Tmux</span>
+                                        <span className={`sm-tool-status ${availableTools.tmux ? 'installed' : ''}`}>
+                                            {availableTools.tmux ? '已安装' : '未安装'}
+                                        </span>
+                                    </div>
+                                    {availableTools.tmux ? (
+                                        <button
+                                            className="sm-btn sm-btn-danger"
+                                            onClick={() => uninstallTool('tmux')}
+                                            disabled={uninstalling === 'tmux'}
+                                        >
+                                            {uninstalling === 'tmux' ? '卸载中...' : '卸载'}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            className="sm-btn sm-btn-primary"
+                                            onClick={() => installTool('tmux')}
+                                            disabled={installing === 'tmux'}
+                                        >
+                                            {installing === 'tmux' ? '安装中...' : '安装'}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Session Dialog */}
+            {editDialog.show && editDialog.session && (
+                <div className="sm-dialog-overlay" onClick={closeEditDialog}>
+                    <div className="sm-dialog" onClick={(e) => e.stopPropagation()}>
+                        <div className="sm-dialog-header">
+                            <h3>编辑会话</h3>
+                            <button className="sm-dialog-close" onClick={closeEditDialog}>
+                                <CloseIcon />
+                            </button>
+                        </div>
+                        <div className="sm-dialog-content">
+                            <div className="sm-form-group">
+                                <label>会话名称</label>
+                                <input
+                                    type="text"
+                                    value={editDialog.name}
+                                    onChange={(e) => setEditDialog(prev => ({ ...prev, name: e.target.value }))}
+                                />
+                            </div>
+                            <div className="sm-form-group">
+                                <label>启动命令 <span className="sm-optional">可选</span></label>
+                                <input
+                                    type="text"
+                                    value={editDialog.command}
+                                    onChange={(e) => setEditDialog(prev => ({ ...prev, command: e.target.value }))}
+                                    placeholder="例如: htop"
+                                />
+                            </div>
+                            <div className="sm-form-group">
+                                <label>备注 <span className="sm-optional">可选</span></label>
+                                <input
+                                    type="text"
+                                    value={editDialog.note}
+                                    onChange={(e) => setEditDialog(prev => ({ ...prev, note: e.target.value }))}
+                                    placeholder="例如: 监控服务"
+                                />
+                            </div>
+                            <div className="sm-form-actions">
+                                <button className="sm-btn" onClick={closeEditDialog}>取消</button>
+                                <button
+                                    className="sm-btn sm-btn-primary"
+                                    onClick={saveSessionEdit}
+                                    disabled={actionLoading === editDialog.session.id}
+                                >
+                                    保存
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirm Dialog */}
+            {confirmDialog.show && (
+                <div className="sm-dialog-overlay">
+                    <div className="sm-dialog sm-dialog-confirm">
+                        <div className="sm-dialog-header">
+                            <h3>{confirmDialog.title}</h3>
+                        </div>
+                        <div className="sm-dialog-content">
+                            <p>{confirmDialog.message}</p>
+                            <div className="sm-form-actions">
+                                <button className="sm-btn" onClick={closeConfirm}>取消</button>
+                                <button className="sm-btn sm-btn-danger" onClick={() => { confirmDialog.onConfirm(); closeConfirm(); }}>确认</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+
+export default SessionList;

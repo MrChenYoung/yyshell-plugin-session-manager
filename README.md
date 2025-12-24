@@ -2,18 +2,21 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/YYShell-Official%20Plugin-blue" alt="Official Plugin">
-  <img src="https://img.shields.io/badge/version-1.0.0-green" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.0-green" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-yellow" alt="License">
 </p>
 
-YYShell 官方插件 - 管理服务器上的 screen/tmux 会话
+YYShell 官方插件 - 管理服务器上的 screen/tmux 会话，支持终端内嵌和命令手册
 
 ## ✨ 功能
 
-- 📋 **列出会话** - 显示所有 screen 和 tmux 后台会话
-- ➕ **创建会话** - 新建 screen 或 tmux 会话
-- 🔗 **附加会话** - 一键连接到已有的后台会话
-- ❌ **终止会话** - 关闭指定的后台会话
+- 📋 **会话管理** - 列出、创建、附加、分离、终止 screen/tmux 会话
+- 🖥️ **终端内嵌** - 直接在插件内显示终端，支持多窗口并排
+- 📖 **命令手册** - 内置 Screen/Tmux 全面命令参考和示例
+- ✏️ **会话编辑** - 自定义会话名称和备注
+- 🔄 **批量操作** - 批量选择和删除会话
+- ⚙️ **工具管理** - 安装/卸载 screen 和 tmux
+- 🔐 **密钥认证** - 支持密码和密钥两种认证方式
 
 ## 📦 安装
 
@@ -35,18 +38,23 @@ YYShell 官方插件 - 管理服务器上的 screen/tmux 会话
 
 1. 连接到服务器
 2. 在底部面板切换到 "会话管理" 标签
-3. 查看和管理服务器上的后台会话
+3. 点击会话可直接在右侧打开终端
+4. 点击 **?** 按钮可查看 Screen/Tmux 命令手册
 
 ## 📁 目录结构
 
 ```
 session-manager/
-├── manifest.json      # 插件清单
-├── README.md          # 说明文档
+├── manifest.json         # 插件清单
+├── README.md             # 说明文档
 └── src/
-    ├── index.tsx      # 主入口
-    ├── SessionList.tsx # 会话列表组件
-    └── types.ts       # 类型定义
+    ├── index.tsx         # 主入口 & 服务器选择
+    ├── SessionList.tsx   # 会话列表组件
+    ├── TerminalPanel.tsx # 终端面板组件
+    ├── CommandManual.tsx # 命令手册组件
+    ├── commandData.ts    # 命令数据（Screen/Tmux）
+    ├── types.ts          # 类型定义
+    └── styles.css        # 样式文件
 ```
 
 ## 🔧 开发
