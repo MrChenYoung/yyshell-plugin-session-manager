@@ -1,13 +1,16 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js'
 import { resolve } from 'path'
 
 export default defineConfig({
     plugins: [
-        react(),
         cssInjectedByJsPlugin()  // 将 CSS 内联注入到 JS 中
     ],
+    esbuild: {
+        jsx: 'transform',
+        jsxFactory: 'React.createElement',
+        jsxFragment: 'React.Fragment',
+    },
     define: {
         'process.env.NODE_ENV': JSON.stringify('production'),
     },
@@ -21,11 +24,13 @@ export default defineConfig({
         outDir: 'dist',
         rollupOptions: {
             // React/ReactDOM 由宿主应用提供，不打包进插件
-            external: ['react', 'react-dom'],
+            external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
             output: {
                 globals: {
-                    react: 'React',
-                    'react-dom': 'ReactDOM'
+                    'react': 'React',
+                    'react-dom': 'ReactDOM',
+                    'react/jsx-runtime': 'React',
+                    'react/jsx-dev-runtime': 'React'
                 },
                 // 确保 CSS 内联到 JS 中
                 assetFileNames: '[name][extname]'
