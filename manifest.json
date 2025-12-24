@@ -10,7 +10,7 @@
         "yyshell": ">=0.3.0"
     },
     "entrypoints": {
-        "frontend": "src/index.tsx"
+        "frontend": "plugin.js"
     },
     "contributes": {
         "panels": [
