@@ -1,7 +1,7 @@
 {
     "id": "session-manager",
     "name": "会话管理器",
-    "version": "1.1.2",
+    "version": "1.2.0",
     "description": "管理服务器上的 screen/tmux 会话，支持终端内嵌和命令手册",
     "author": "YYShell Team",
     "license": "MIT",

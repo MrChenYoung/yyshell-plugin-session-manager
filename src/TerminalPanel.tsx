@@ -7,15 +7,15 @@ interface TerminalPanelProps {
     baseConnectionId: string;  // Base connection ID from parent
     serverHost: string;        // Server host for creating new connection
     serverUser: string;        // SSH username for connection
-    serverPassword?: string;   // SSH password for authentication
     serverAuthType?: string;   // Auth type: 'Password' or 'Key'
     serverKeyPath?: string;    // Private key path for key-based auth
+    serverId: string;          // Original server ID for keychain password lookup
     api: YYShellPluginAPI;
     onDetach: () => void;
     onClose: () => void;
 }
 
-export function TerminalPanel({ session, baseConnectionId, serverHost, serverUser, serverPassword, serverAuthType, serverKeyPath, api, onDetach, onClose }: TerminalPanelProps) {
+export function TerminalPanel({ session, baseConnectionId, serverHost, serverUser, serverAuthType, serverKeyPath, serverId, api, onDetach, onClose }: TerminalPanelProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const terminalRef = useRef<any>(null);
     const fitAddonRef = useRef<any>(null);
@@ -121,15 +121,15 @@ export function TerminalPanel({ session, baseConnectionId, serverHost, serverUse
         const connectAndAttach = async () => {
             try {
                 // Create independent connection for this session
-                // Support both password and key-based authentication
+                // Use serverId for keychain lookup, sessionConnectionId as the unique connection ID
                 await api.connect({
                     id: sessionConnectionId,
                     host: serverHost,
                     port: 22,
                     user: serverUser,
                     authType: serverAuthType || 'Password',
-                    password: serverPassword,
                     privateKeyPath: serverKeyPath,
+                    serverId: serverId,  // Original server ID for keychain password lookup
                 });
 
                 // Small delay to ensure PTY is ready

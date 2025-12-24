@@ -29,7 +29,6 @@ export interface ServerConfig {
     port: number;
     username: string;
     auth_type: 'Password' | 'Key' | 'Agent';
-    password?: string;
     private_key_path?: string;
     tags: string[];
     group?: string;
@@ -47,21 +46,22 @@ export interface ConnectionOptions {
     host: string;
     port?: number;
     user?: string;
-    password?: string;    // SSH password for authentication
+    // Note: password is now handled securely by the host via system keychain
 }
 
 export interface YYShellPluginAPI {
     // Load server list
     loadServers(): Promise<ServerConfig[]>;
-    // Connect to server
+    // Connect to server (password is handled securely by host via system keychain)
+    // When creating sub-connections, use 'serverId' to specify which server's credentials to use
     connect(options: {
-        id: string;
+        id: string;           // Connection ID (unique for each connection)
         host: string;
         port: number;
         user: string;
         authType?: string;
-        password?: string;
         privateKeyPath?: string;
+        serverId?: string;    // Original server ID for keychain lookup (optional, defaults to 'id')
     }): Promise<string>;
     // Disconnect from server
     disconnect(id: string): Promise<void>;

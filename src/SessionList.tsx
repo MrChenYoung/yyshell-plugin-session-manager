@@ -68,13 +68,13 @@ interface SessionListProps {
     serverName: string;
     serverHost: string;
     serverUser: string;      // SSH username for connection
-    serverPassword?: string; // SSH password for authentication
     serverAuthType?: string; // Auth type: 'Password' or 'Key'
     serverKeyPath?: string;  // Private key path for key-based auth
+    serverId?: string;       // Original server ID for keychain password lookup
     onBack: () => void;
 }
 
-export function SessionList({ connectionId, serverName, serverHost, serverUser, serverPassword, serverAuthType, serverKeyPath, onBack }: SessionListProps) {
+export function SessionList({ connectionId, serverName, serverHost, serverUser, serverAuthType, serverKeyPath, serverId, onBack }: SessionListProps) {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -1110,9 +1110,9 @@ echo "===END==="
                                         baseConnectionId={connectionId}
                                         serverHost={serverHost}
                                         serverUser={serverUser}
-                                        serverPassword={serverPassword}
                                         serverAuthType={serverAuthType}
                                         serverKeyPath={serverKeyPath}
+                                        serverId={serverId || connectionId}
                                         api={api!}
                                         onDetach={() => detachSession(session)}
                                         onClose={() => {

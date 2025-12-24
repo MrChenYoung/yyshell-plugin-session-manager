@@ -25,6 +25,7 @@ function parseAutoConnectServer(input: ServerConfig | string | undefined): Serve
     if (typeof input === 'object' && input !== null) {
         const obj = input as any;
         // Normalize: support both snake_case and camelCase field names
+        // Note: password is no longer passed to plugins for security
         return {
             id: obj.id,
             name: obj.name,
@@ -32,7 +33,6 @@ function parseAutoConnectServer(input: ServerConfig | string | undefined): Serve
             port: obj.port,
             username: obj.username || obj.user,
             auth_type: obj.auth_type || obj.authType || 'Password',
-            password: obj.password,
             private_key_path: obj.private_key_path || obj.privateKeyPath,
             tags: obj.tags || [],
             group: obj.group,
@@ -58,6 +58,7 @@ function parseAutoConnectServer(input: ServerConfig | string | undefined): Serve
             const parsed = JSON.parse(jsonStr);
             if (parsed && typeof parsed === 'object' && parsed.id && parsed.host) {
                 // Normalize field names
+                // Note: password is no longer passed to plugins for security
                 return {
                     id: parsed.id,
                     name: parsed.name,
@@ -65,7 +66,6 @@ function parseAutoConnectServer(input: ServerConfig | string | undefined): Serve
                     port: parsed.port,
                     username: parsed.username || parsed.user,
                     auth_type: parsed.auth_type || parsed.authType || 'Password',
-                    password: parsed.password,
                     private_key_path: parsed.private_key_path || parsed.privateKeyPath,
                     tags: parsed.tags || [],
                     group: parsed.group,
@@ -103,13 +103,13 @@ export function SessionManagerApp({ initialConnectionId, initialServer, autoConn
             setAutoConnecting(true);
             setAutoConnectError(null);
             try {
+                // Password is handled securely by host via system keychain
                 await api.connect({
                     id: autoConnectServer.id,
                     host: autoConnectServer.host,
                     port: autoConnectServer.port,
                     user: autoConnectServer.username,
                     authType: autoConnectServer.auth_type,
-                    password: autoConnectServer.password,
                     privateKeyPath: autoConnectServer.private_key_path,
                 });
                 // Connection successful
@@ -148,13 +148,13 @@ export function SessionManagerApp({ initialConnectionId, initialServer, autoConn
         setAutoConnecting(true);
         setAutoConnectError(null);
         try {
+            // Password is handled securely by host via system keychain
             await api.connect({
                 id: autoConnectServer.id,
                 host: autoConnectServer.host,
                 port: autoConnectServer.port,
                 user: autoConnectServer.username,
                 authType: autoConnectServer.auth_type,
-                password: autoConnectServer.password,
                 privateKeyPath: autoConnectServer.private_key_path,
             });
             setSelectedServer(autoConnectServer);
@@ -182,9 +182,9 @@ export function SessionManagerApp({ initialConnectionId, initialServer, autoConn
                 serverName={selectedServer.name}
                 serverHost={selectedServer.host}
                 serverUser={selectedServer.username}
-                serverPassword={selectedServer.password}
                 serverAuthType={selectedServer.auth_type}
                 serverKeyPath={selectedServer.private_key_path}
+                serverId={selectedServer.id}
                 onBack={handleBack}
             />
         );
@@ -239,22 +239,22 @@ export interface SessionManagerProps {
     serverName: string;
     serverHost: string;
     serverUser: string;
-    serverPassword?: string;
     serverAuthType?: string;
     serverKeyPath?: string;
+    serverId?: string;
     onBack: () => void;
 }
 
-export function SessionManager({ connectionId, serverName, serverHost, serverUser, serverPassword, serverAuthType, serverKeyPath, onBack }: SessionManagerProps) {
+export function SessionManager({ connectionId, serverName, serverHost, serverUser, serverAuthType, serverKeyPath, serverId, onBack }: SessionManagerProps) {
     return (
         <SessionList
             connectionId={connectionId}
             serverName={serverName}
             serverHost={serverHost}
             serverUser={serverUser}
-            serverPassword={serverPassword}
             serverAuthType={serverAuthType}
             serverKeyPath={serverKeyPath}
+            serverId={serverId || connectionId}
             onBack={onBack}
         />
     );

@@ -45,13 +45,13 @@ export function ServerSelector({ onConnect }: ServerSelectorProps) {
         setConnectingServerId(server.id);
         setError(null);
         try {
+            // Password is handled securely by host via system keychain
             await api.connect({
                 id: server.id,
                 host: server.host,
                 port: server.port,
                 user: server.username,
                 authType: server.auth_type,
-                password: server.password,
                 privateKeyPath: server.private_key_path,
             });
             onConnect(server, server.id);
