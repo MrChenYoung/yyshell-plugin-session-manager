@@ -8,6 +8,9 @@ export default defineConfig({
         react(),
         cssInjectedByJsPlugin()  // 将 CSS 内联注入到 JS 中
     ],
+    define: {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+    },
     build: {
         lib: {
             entry: resolve(__dirname, 'src/index.tsx'),
