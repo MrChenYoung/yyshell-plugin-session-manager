@@ -123,4 +123,4 @@ MIT License
 ## 🔗 相关链接
 
 - [YYShell 主仓库](https://github.com/MrChenYoung/yyshell)
-- [插件开发文档](https://github.com/MrChenYoung/yyshell/wiki/Plugin-Development)
+- [插件开发文档](https://github.com/MrChenYoung/yyshell/blob/main/docs/PLUGIN_DEVELOPMENT.md)
