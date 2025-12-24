@@ -36,7 +36,7 @@ YYShell 官方插件 - 管理服务器上的 screen/tmux 会话，支持终端�
 
 ### 方式三：本地安装
 
-1. 下载本仓库的 ZIP 压缩包
+1. 前往 [Release 页面](https://github.com/MrChenYoung/yyshell-plugin-session-manager/releases) 下载最新版本的 `session-manager.zip`
 2. 打开 YYShell 插件中心
 3. 选择「本地安装」
 4. 选择下载的压缩包文件
