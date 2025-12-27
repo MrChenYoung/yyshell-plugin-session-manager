@@ -32,6 +32,7 @@ jobs:
           mkdir -p package
           cp manifest.json package/
           cp dist/plugin.js package/
+          cp icon-*.png package/
           cd package && zip -r ../session-manager.zip .
 
       - name: Get version from tag
