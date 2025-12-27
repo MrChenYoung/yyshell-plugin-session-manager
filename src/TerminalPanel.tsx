@@ -205,19 +205,7 @@ export function TerminalPanel({ session, baseConnectionId, serverHost, serverUse
             term.dispose();
             hasConnectedRef.current = false;  // Reset for potential remount
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionConnectionId]);
-
-    const handleDetach = async () => {
-        try {
-            // Send detach key sequence
-            const detachKey = session.type === 'screen' ? '\x01d' : '\x02d'; // Ctrl-A d or Ctrl-B d
-            await api.writePty(sessionConnectionId, detachKey);
-            onDetach();
-        } catch (e) {
-            console.error('Failed to detach:', e);
-        }
-    };
 
     // Show error if initialization failed
     if (initError && !isConnecting) {
@@ -257,8 +245,8 @@ export function TerminalPanel({ session, baseConnectionId, serverHost, serverUse
                 <div className="sm-terminal-actions">
                     <button
                         className="sm-terminal-btn sm-terminal-close"
-                        onClick={handleDetach}
-                        title="分离并关闭"
+                        onClick={onClose}
+                        title="关闭终端"
                     >
                         ✕
                     </button>

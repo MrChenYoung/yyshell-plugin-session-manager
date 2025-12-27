@@ -63,6 +63,67 @@ const AlertIcon = () => (
     </svg>
 );
 
+// Context Menu Icons
+const AttachIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polygon points="5 3 19 12 5 21 5 3" />
+    </svg>
+);
+
+const DetachIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="6" y="4" width="4" height="16" rx="1" />
+        <rect x="14" y="4" width="4" height="16" rx="1" />
+    </svg>
+);
+
+const EditIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+);
+
+const CopyIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+);
+
+const DeleteIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+        <line x1="10" y1="11" x2="10" y2="17" />
+        <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+);
+
+const MoveUpIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+);
+
+const MoveDownIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 5v14M5 12l7 7 7-7" />
+    </svg>
+);
+
+const PinTopIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 17V3M5 10l7-7 7 7" />
+        <line x1="4" y1="21" x2="20" y2="21" />
+    </svg>
+);
+
+const ForceDetachIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+);
+
 interface SessionListProps {
     connectionId: string;
     serverName: string;
@@ -105,6 +166,21 @@ export function SessionList({ connectionId, serverName, serverHost, serverUser, 
         const saved = localStorage.getItem('sm-terminal-display-count');
         return saved ? Math.min(4, Math.max(1, parseInt(saved, 10))) : 2;
     });
+
+    // Display mode setting ('split' | 'tabs')
+    const [displayMode, setDisplayMode] = useState<'split' | 'tabs'>(() => {
+        const saved = localStorage.getItem('sm-display-mode');
+        return (saved === 'tabs') ? 'tabs' : 'split';
+    });
+
+    // Auto-attach setting (default: false)
+    const [autoAttachEnabled, setAutoAttachEnabled] = useState<boolean>(() => {
+        const saved = localStorage.getItem('sm-auto-attach');
+        return saved === 'true';
+    });
+
+    // Active tab index for tabs mode
+    const [activeTabIndex, setActiveTabIndex] = useState(0);
 
     // Custom confirm dialog
     const [confirmDialog, setConfirmDialog] = useState<{
@@ -379,6 +455,27 @@ echo "===END==="
                 allSessions.push(...parseTmuxOutput(sections.tmuxList));
             }
 
+            // Restore saved session order
+            const orderKey = `sm-session-order-${connectionId}`;
+            try {
+                const savedOrder = localStorage.getItem(orderKey);
+                if (savedOrder) {
+                    const orderList: string[] = JSON.parse(savedOrder);
+                    // Sort sessions based on saved order
+                    allSessions.sort((a, b) => {
+                        const indexA = orderList.indexOf(a.id);
+                        const indexB = orderList.indexOf(b.id);
+                        // Sessions not in saved order go to the end
+                        if (indexA === -1 && indexB === -1) return 0;
+                        if (indexA === -1) return 1;
+                        if (indexB === -1) return -1;
+                        return indexA - indexB;
+                    });
+                }
+            } catch {
+                // Ignore parse errors
+            }
+
             setSessions(allSessions);
             setAvailableTools({ screen: hasScreen, tmux: hasTmux });
             setInitialCheckDone(true);
@@ -396,17 +493,21 @@ echo "===END==="
         loadSessions();
     }, [loadSessions]);
 
-    // Auto-attach first 6 sessions on initial load
+    // Auto-attach first 6 sessions on initial load (if enabled)
     const hasAutoAttachedRef = useRef(false);
     useEffect(() => {
-        // Only auto-attach once when initial check is done and we haven't attached yet
-        if (initialCheckDone && !hasAutoAttachedRef.current && sessions.length > 0) {
+        // Only auto-attach once when initial check is done, setting is enabled, and we haven't attached yet
+        if (autoAttachEnabled && initialCheckDone && !hasAutoAttachedRef.current && sessions.length > 0) {
             hasAutoAttachedRef.current = true;
             // Attach first 6 sessions (or less if fewer available)
             const sessionsToAttach = sessions.slice(0, 6);
             setAttachedSessions(sessionsToAttach);
+            // If tabs mode, set active to first tab
+            if (displayMode === 'tabs') {
+                setActiveTabIndex(0);
+            }
         }
-    }, [initialCheckDone, sessions]);
+    }, [autoAttachEnabled, initialCheckDone, sessions, displayMode]);
 
     // Close context menu on click outside
     useEffect(() => {
@@ -760,18 +861,27 @@ echo "===END==="
             }
 
             // Add to attached sessions
-            setAttachedSessions(prev => [...prev, session]);
-
-            // Auto scroll to show the newly opened terminal
-            setTimeout(() => {
-                const container = terminalPanelsRef.current;
-                if (container) {
-                    container.scrollTo({
-                        left: container.scrollWidth,
-                        behavior: 'smooth'
-                    });
+            setAttachedSessions(prev => {
+                const newSessions = [...prev, session];
+                // Auto switch to new tab in tabs mode
+                if (displayMode === 'tabs') {
+                    setActiveTabIndex(newSessions.length - 1);
                 }
-            }, 100);
+                return newSessions;
+            });
+
+            // Auto scroll to show the newly opened terminal (for split mode)
+            if (displayMode === 'split') {
+                setTimeout(() => {
+                    const container = terminalPanelsRef.current;
+                    if (container) {
+                        container.scrollTo({
+                            left: container.scrollWidth,
+                            behavior: 'smooth'
+                        });
+                    }
+                }, 100);
+            }
         } catch (e) {
             setError(`附加失败: ${e}`);
         }
@@ -861,6 +971,51 @@ echo "===END==="
             loadSessions();
         }
     };
+
+    // Session ordering functions
+    const getSessionOrderKey = () => `sm-session-order-${connectionId}`;
+
+    const saveSessionOrder = (orderedSessions: Session[]) => {
+        const orderMap = orderedSessions.map(s => s.id);
+        localStorage.setItem(getSessionOrderKey(), JSON.stringify(orderMap));
+    };
+
+    const moveSessionUp = (session: Session) => {
+        closeContextMenu();
+        const index = sessions.findIndex(s => s.id === session.id);
+        if (index <= 0) return; // Already at top or not found
+
+        const newSessions = [...sessions];
+        [newSessions[index - 1], newSessions[index]] = [newSessions[index], newSessions[index - 1]];
+        setSessions(newSessions);
+        saveSessionOrder(newSessions);
+    };
+
+    const moveSessionDown = (session: Session) => {
+        closeContextMenu();
+        const index = sessions.findIndex(s => s.id === session.id);
+        if (index < 0 || index >= sessions.length - 1) return; // Already at bottom or not found
+
+        const newSessions = [...sessions];
+        [newSessions[index], newSessions[index + 1]] = [newSessions[index + 1], newSessions[index]];
+        setSessions(newSessions);
+        saveSessionOrder(newSessions);
+    };
+
+    const pinSessionToTop = (session: Session) => {
+        closeContextMenu();
+        const index = sessions.findIndex(s => s.id === session.id);
+        if (index <= 0) return; // Already at top or not found
+
+        const newSessions = [...sessions];
+        const [pinnedSession] = newSessions.splice(index, 1);
+        newSessions.unshift(pinnedSession);
+        setSessions(newSessions);
+        saveSessionOrder(newSessions);
+    };
+
+    // Get session index for displaying disabled state in menu
+    const getSessionIndex = (session: Session) => sessions.findIndex(s => s.id === session.id);
 
     // Sync currentTerminalIndex and scroll capability with scroll position
     useEffect(() => {
@@ -1093,7 +1248,8 @@ echo "===END==="
                             <h3>无附加的会话</h3>
                             <p>双击左侧列表中的会话以附加</p>
                         </div>
-                    ) : (
+                    ) : displayMode === 'split' ? (
+                        /* Split Mode - Multiple terminals side by side */
                         <>
                             <div
                                 className="sm-terminal-panels"
@@ -1115,13 +1271,16 @@ echo "===END==="
                                         serverId={serverId || connectionId}
                                         api={api!}
                                         onDetach={() => detachSession(session)}
-                                        onClose={() => {
-                                            setAttachedSessions(prev => prev.filter(s => s.id !== session.id));
-                                            // Adjust current index if needed
-                                            if (index <= currentTerminalIndex && currentTerminalIndex > 0) {
-                                                setCurrentTerminalIndex(prev => prev - 1);
+                                        onClose={() => showConfirm(
+                                            '关闭终端',
+                                            `确定要关闭会话 "${session.name}" 吗？`,
+                                            () => {
+                                                setAttachedSessions(prev => prev.filter(s => s.id !== session.id));
+                                                if (index <= currentTerminalIndex && currentTerminalIndex > 0) {
+                                                    setCurrentTerminalIndex(prev => prev - 1);
+                                                }
                                             }
-                                        }}
+                                        )}
                                     />
                                 ))}
                             </div>
@@ -1177,44 +1336,200 @@ echo "===END==="
                                 </div>
                             )}
                         </>
+                    ) : (
+                        /* Tabs Mode - Tab bar with single fullscreen terminal */
+                        <div className="sm-tabs-container">
+                            {/* Tab Bar */}
+                            <div className="sm-tabs-bar">
+                                <div className="sm-tabs-list">
+                                    {attachedSessions.map((session, index) => (
+                                        <div
+                                            key={session.id}
+                                            className={`sm-tab ${activeTabIndex === index ? 'active' : ''}`}
+                                            onClick={() => setActiveTabIndex(index)}
+                                        >
+                                            <span className={`sm-tab-type ${session.type}`}>
+                                                {session.type === 'screen' ? 'S' : 'T'}
+                                            </span>
+                                            <span className="sm-tab-name">{session.name}</span>
+                                            <button
+                                                className="sm-tab-close"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    showConfirm(
+                                                        '关闭标签',
+                                                        `确定要关闭会话 "${session.name}" 吗？`,
+                                                        () => {
+                                                            setAttachedSessions(prev => prev.filter(s => s.id !== session.id));
+                                                            if (index <= activeTabIndex && activeTabIndex > 0) {
+                                                                setActiveTabIndex(prev => prev - 1);
+                                                            }
+                                                        }
+                                                    );
+                                                }}
+                                                title="关闭"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                {attachedSessions.length > 1 && (
+                                    <button
+                                        className="sm-tabs-close-all"
+                                        onClick={() => showConfirm(
+                                            '关闭全部标签',
+                                            `确定要关闭全部 ${attachedSessions.length} 个标签吗？`,
+                                            () => {
+                                                setAttachedSessions([]);
+                                                setActiveTabIndex(0);
+                                            }
+                                        )}
+                                        title="关闭全部"
+                                    >
+                                        关闭全部
+                                    </button>
+                                )}
+                            </div>
+                            {/* Tab Content - All terminals rendered, inactive ones hidden */}
+                            <div className="sm-tabs-content">
+                                {attachedSessions.map((session, index) => (
+                                    <div
+                                        key={session.id}
+                                        className={`sm-tab-panel ${index === activeTabIndex ? 'active' : ''}`}
+                                        style={{ display: index === activeTabIndex ? 'flex' : 'none' }}
+                                    >
+                                        <TerminalPanel
+                                            session={session}
+                                            baseConnectionId={connectionId}
+                                            serverHost={serverHost}
+                                            serverUser={serverUser}
+                                            serverAuthType={serverAuthType}
+                                            serverKeyPath={serverKeyPath}
+                                            serverId={serverId || connectionId}
+                                            api={api!}
+                                            onDetach={() => detachSession(session)}
+                                            onClose={() => showConfirm(
+                                                '关闭终端',
+                                                `确定要关闭会话 "${session.name}" 吗？`,
+                                                () => {
+                                                    setAttachedSessions(prev => prev.filter(s => s.id !== session.id));
+                                                    if (index <= activeTabIndex && activeTabIndex > 0) {
+                                                        setActiveTabIndex(prev => prev - 1);
+                                                    }
+                                                }
+                                            )}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>
 
             {/* Context Menu */}
-            {contextMenu.show && contextMenu.session && (
-                <div className="sm-context-overlay" onClick={closeContextMenu}>
-                    <div
-                        className="sm-context-menu"
-                        style={{ left: contextMenu.x, top: contextMenu.y }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <button onClick={() => { attachSession(contextMenu.session!); closeContextMenu(); }}>
-                            📺 附加会话
-                        </button>
-                        {attachedSessions.some(s => s.id === contextMenu.session?.id) && (
-                            <button onClick={() => detachSession(contextMenu.session!)}>
-                                ◇ 分离会话
-                            </button>
-                        )}
-                        {contextMenu.session?.status === 'attached' && !attachedSessions.some(s => s.id === contextMenu.session?.id) && (
-                            <button onClick={() => forceDetachRemote(contextMenu.session!)}>
-                                ⚡ 强制分离远程
-                            </button>
-                        )}
-                        <button onClick={() => openEditDialog(contextMenu.session!)}>
-                            ✏️ 编辑会话
-                        </button>
-                        <button onClick={() => duplicateSession(contextMenu.session!)}>
-                            📋 复制会话
-                        </button>
-                        <div className="sm-context-divider" />
-                        <button className="sm-danger" onClick={() => { killSession(contextMenu.session!); closeContextMenu(); }}>
-                            🗑️ 删除会话
-                        </button>
+            {contextMenu.show && contextMenu.session && (() => {
+                const sessionIndex = getSessionIndex(contextMenu.session);
+                const isFirst = sessionIndex === 0;
+                const isLast = sessionIndex === sessions.length - 1;
+                const isLocallyAttached = attachedSessions.some(s => s.id === contextMenu.session?.id);
+                const isRemoteAttached = contextMenu.session?.status === 'attached' && !isLocallyAttached;
+
+                return (
+                    <div className="sm-context-overlay" onClick={closeContextMenu}>
+                        <div
+                            className="sm-context-menu"
+                            style={{ left: contextMenu.x, top: contextMenu.y }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Header with session info */}
+                            <div className="sm-context-header">
+                                <span className={`sm-context-type ${contextMenu.session.type}`}>
+                                    {contextMenu.session.type === 'screen' ? 'S' : 'T'}
+                                </span>
+                                <span className="sm-context-name">{contextMenu.session.name}</span>
+                            </div>
+
+                            <div className="sm-context-divider" />
+
+                            {/* Connection group */}
+                            <div className="sm-context-group">
+                                <button onClick={() => { attachSession(contextMenu.session!); closeContextMenu(); }}>
+                                    <AttachIcon />
+                                    <span>附加会话</span>
+                                </button>
+                                {isLocallyAttached && (
+                                    <button onClick={() => detachSession(contextMenu.session!)}>
+                                        <DetachIcon />
+                                        <span>分离会话</span>
+                                    </button>
+                                )}
+                                {isRemoteAttached && (
+                                    <button onClick={() => forceDetachRemote(contextMenu.session!)}>
+                                        <ForceDetachIcon />
+                                        <span>强制分离远程</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="sm-context-divider" />
+
+                            {/* Edit group */}
+                            <div className="sm-context-group">
+                                <button onClick={() => openEditDialog(contextMenu.session!)}>
+                                    <EditIcon />
+                                    <span>编辑会话</span>
+                                </button>
+                                <button onClick={() => duplicateSession(contextMenu.session!)}>
+                                    <CopyIcon />
+                                    <span>复制会话</span>
+                                </button>
+                            </div>
+
+                            <div className="sm-context-divider" />
+
+                            {/* Sorting group */}
+                            <div className="sm-context-group">
+                                <button
+                                    onClick={() => moveSessionUp(contextMenu.session!)}
+                                    disabled={isFirst}
+                                    className={isFirst ? 'sm-disabled' : ''}
+                                >
+                                    <MoveUpIcon />
+                                    <span>上移</span>
+                                </button>
+                                <button
+                                    onClick={() => moveSessionDown(contextMenu.session!)}
+                                    disabled={isLast}
+                                    className={isLast ? 'sm-disabled' : ''}
+                                >
+                                    <MoveDownIcon />
+                                    <span>下移</span>
+                                </button>
+                                <button
+                                    onClick={() => pinSessionToTop(contextMenu.session!)}
+                                    disabled={isFirst}
+                                    className={isFirst ? 'sm-disabled' : ''}
+                                >
+                                    <PinTopIcon />
+                                    <span>置顶</span>
+                                </button>
+                            </div>
+
+                            <div className="sm-context-divider" />
+
+                            {/* Danger zone */}
+                            <div className="sm-context-group">
+                                <button className="sm-danger" onClick={() => { killSession(contextMenu.session!); closeContextMenu(); }}>
+                                    <DeleteIcon />
+                                    <span>删除会话</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Create Session Dialog */}
             {showCreate && (
@@ -1312,21 +1627,68 @@ echo "===END==="
                             {/* Terminal Display Count Setting */}
                             <div className="sm-settings-section">
                                 <h4 className="sm-settings-title">显示设置</h4>
+
+                                {/* Display Mode Toggle */}
                                 <div className="sm-setting-item">
-                                    <label className="sm-setting-label">终端显示个数</label>
+                                    <label className="sm-setting-label">显示模式</label>
                                     <div className="sm-setting-btn-group">
-                                        {[1, 2, 3, 4].map((num) => (
-                                            <button
-                                                key={num}
-                                                className={`sm-setting-btn ${terminalDisplayCount === num ? 'active' : ''}`}
-                                                onClick={() => {
-                                                    setTerminalDisplayCount(num);
-                                                    localStorage.setItem('sm-terminal-display-count', num.toString());
-                                                }}
-                                            >
-                                                {num}
-                                            </button>
-                                        ))}
+                                        <button
+                                            className={`sm-setting-btn ${displayMode === 'split' ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setDisplayMode('split');
+                                                localStorage.setItem('sm-display-mode', 'split');
+                                            }}
+                                        >
+                                            分屏
+                                        </button>
+                                        <button
+                                            className={`sm-setting-btn ${displayMode === 'tabs' ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setDisplayMode('tabs');
+                                                localStorage.setItem('sm-display-mode', 'tabs');
+                                            }}
+                                        >
+                                            标签
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Terminal Count - only show in split mode */}
+                                {displayMode === 'split' && (
+                                    <div className="sm-setting-item">
+                                        <label className="sm-setting-label">终端显示个数</label>
+                                        <div className="sm-setting-btn-group">
+                                            {[1, 2, 3, 4].map((num) => (
+                                                <button
+                                                    key={num}
+                                                    className={`sm-setting-btn ${terminalDisplayCount === num ? 'active' : ''}`}
+                                                    onClick={() => {
+                                                        setTerminalDisplayCount(num);
+                                                        localStorage.setItem('sm-terminal-display-count', num.toString());
+                                                    }}
+                                                >
+                                                    {num}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Auto-attach Toggle */}
+                                <div className="sm-setting-item">
+                                    <label className="sm-setting-label">自动附加会话</label>
+                                    <div className="sm-setting-toggle-wrapper">
+                                        <span className="sm-setting-hint">进入时自动附加前6个会话</span>
+                                        <button
+                                            className={`sm-toggle ${autoAttachEnabled ? 'active' : ''}`}
+                                            onClick={() => {
+                                                const newValue = !autoAttachEnabled;
+                                                setAutoAttachEnabled(newValue);
+                                                localStorage.setItem('sm-auto-attach', newValue.toString());
+                                            }}
+                                        >
+                                            <span className="sm-toggle-slider" />
+                                        </button>
                                     </div>
                                 </div>
                             </div>
