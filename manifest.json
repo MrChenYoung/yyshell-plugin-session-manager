@@ -17,7 +17,7 @@
             {
                 "id": "session-panel",
                 "title": "会话管理",
-                "icon": "./icon.png",
+                "icon": "./icon-256.png",
                 "location": "bottom"
             }
         ]
