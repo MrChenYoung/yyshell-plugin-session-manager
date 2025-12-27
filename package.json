@@ -1,6 +1,6 @@
 {
   "name": "yyshell-plugin-session-manager",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "YYShell 官方插件 - 管理服务器上的 screen/tmux 会话",
   "type": "module",
   "scripts": {
